@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+﻿cmake_minimum_required(VERSION 3.28)
 project(black_screen_app)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -15,10 +15,13 @@ endif()
 
 set(SOURCES
         src/app/main.cpp
+        src/app/help_dialog.cpp
         src/app/WindowInitiator.cpp
         src/app/WindowInitiator.hpp
         src/app/ColorHandler.cpp
         src/app/ColorHandler.hpp
+        src/app/help_dialog.rc   
+        src/app/resource.h   
 )
 
 if(CMAKE_GENERATOR_PLATFORM STREQUAL "Win32") # Windows x86
@@ -30,4 +33,9 @@ else()
 endif()
 
 add_executable(${EXECUTABLE_NAME} WIN32 ${SOURCES})
-set_target_properties(${EXECUTABLE_NAME} PROPERTIES OUTPUT_NAME "${EXECUTABLE_NAME}$<$<CONFIG:Debug>:-debug>")
+set_target_properties(${EXECUTABLE_NAME} PROPERTIES
+    WIN32_EXECUTABLE TRUE
+    OUTPUT_NAME "${EXECUTABLE_NAME}$<$<CONFIG:Debug>:-debug>"
+)
+
+target_link_libraries(${EXECUTABLE_NAME} comctl32)
