@@ -32,7 +32,10 @@ void showHelp() {
         L"  black_screen_app.exe [OPTIONS]\n"
         L"\n"
         L"Options:\n"
-        L"  -m, --monitor <indices>     Specify monitor indices to turn off.\n"
+        L"  -m, --monitor <indices>     Specify monitor indices to turn off (1-based).\n"
+        L"                              Examples: -m 1 2, -m 2,3,4, -m 0 (all)\n"
+        L"  -M, --monitor-name <names>  Specify monitor names to turn off (substring match).\n"
+        L"                              Examples: -M \"Dell\" \"HP\", -M \"Laptop\"\n"
         L"  -c, --color <color>         Background color (e.g., #FF0000).\n"
         L"  -dke, --disable-key-exit    Disable exiting with any key press.\n"
         L"  -l, --list                  List all detected monitors.\n"
@@ -41,7 +44,8 @@ void showHelp() {
         L"Examples:\n"
         L"  black_screen_app.exe -m 0        → All monitors\n"
         L"  black_screen_app.exe -m 1 2      → Monitors 1 and 2\n"
-        L"  black_screen_app.exe -m 2,3      → Monitors 2 and 3\n"
+        L"  black_screen_app.exe -M \"Dell\"   → Monitor with 'Dell' in name\n"
+        L"  black_screen_app.exe -M \"Dell\" \"HP\" → Multiple monitors by name\n"
         L"  black_screen_app.exe -c \"#00FF00\" → Green background\n";
 
     ShowCustomTextDialog(L"Help", helpText);
@@ -66,11 +70,18 @@ std::vector<std::string> split(const std::string& s, const std::string& delims =
     return tokens;
 }
 
+extern std::vector<DISPLAY_DEVICEW> g_devices;
+extern std::vector<MonitorData> g_monitors;
+extern void EnumerateDisplayConfig();
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
 
     std::string backgroundColor = "black";
-    bool shouldExitOnKeyPress = false;
-    std::vector<int> monitorIndices = { 0 }; // default: 0 = all monitors (user-facing)
+    bool shouldExitOnKeyPress = false;    
+    std::vector<int> monitorIndices = { 0 }; // default: all (0-based internally)
+    std::vector<std::string> monitorPatterns; // for -M
+    
+
 
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -79,6 +90,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
+    
     // Check for help or no args
     if (argc == 1) {
         showHelp();
@@ -86,36 +98,49 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
+    
+    
+    
+    g_monitors.clear();    
+    g_monitors = EnumerateMonitorsWithNames();
 
+    
+
+    
     // First pass: check for --list, --help
     for (int i = 1; i < argc; ++i) {
         std::wstring currentArgW = argv[i];
         std::string currentArg = wstring_to_string(currentArgW);
+        
 
         if (currentArg == "-l" || currentArg == "--list") {
-            g_monitorList.clear();
-            EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, 0);
-
+            
+            
             std::wstring listText = L"Detected Monitors:\n";
             listText += L"====================\n\n";
-            listText += L"Idx  Left    Top     Right   Bottom\n";
-            listText += L"---  ------  ------  ------  ------\n";
-
-            for (size_t idx = 0; idx < g_monitorList.size(); ++idx) {
-                auto& m = g_monitorList[idx];
-                wchar_t buffer[256];
-                swprintf_s(buffer, L"%-3zu  %-6d  %-6d  %-6d  %-6d\n",
+            listText += L"Idx  Left    Top     Right   Bottom  Name\n";
+            listText += L"---  ------  ------  ------  ------  ----\n";
+            
+            for (size_t idx = 0; idx < g_monitors.size(); ++idx) {
+                auto& m = g_monitors[idx];
+                wchar_t buffer[1256];
+                std::wstring name(m.name.begin(), m.name.end());
+                swprintf_s(buffer, L"%-3zu  %-6d  %-6d  %-6d  %-6d  (%d) %ls\n",
                     idx + 1,
                     m.rect.left,
                     m.rect.top,
                     m.rect.right,
-                    m.rect.bottom);
+                    m.rect.bottom,                    
+                    m.index,
+                    name.c_str());
+
                 listText += buffer;
             }
+               
 
             ShowCustomTextDialog(L"Monitor List", listText.c_str());
             LocalFree(argv);
-            return 0;        
+            return 0;
         }
         else if (currentArg == "-h" || currentArg == "--help") {
             showHelp();
@@ -179,10 +204,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 return 1;
             }
 
-            // Validate and convert
-            g_monitorList.clear();
-            EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, 0);
-            size_t monitorCount = g_monitorList.size();
+            size_t monitorCount = g_monitors.size();
 
             std::vector<int> validatedIndices;
             bool useAll = true;
@@ -205,12 +227,39 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
 
             if (useAll) {
-                monitorIndices = { -1 }; 
+                monitorIndices = { -1 };
             }
             else {
                 monitorIndices = validatedIndices;
             }
 
+        }
+        else if (currentArg == "-M" || currentArg == "--monitor-name") {
+            if (!monitorIndices.empty() && monitorIndices.size() == 1 && monitorIndices[0] == 0) {
+                // if default
+                monitorIndices.clear();
+            }
+            if (!monitorIndices.empty()) {
+                MessageBoxW(nullptr, L"Error: Cannot use both -m and -M", L"Error", MB_ICONERROR);
+                LocalFree(argv);
+                return 1;
+            }
+            
+
+            // Parse string patterns
+            monitorPatterns.clear();
+            while (i + 1 < argc) {
+                std::wstring nextArgW = argv[i + 1];
+                std::string nextArg = wstring_to_string(nextArgW);
+                if (!nextArg.empty() && nextArg[0] == '-') break;
+                monitorPatterns.push_back(nextArg);
+                ++i;
+            }
+            if (monitorPatterns.empty()) {
+                MessageBoxW(nullptr, L"Error: No monitor names provided after -M", L"Error", MB_ICONERROR);
+                LocalFree(argv);
+                return 1;
+            }
         }
         else if (currentArg == "-c" || currentArg == "--color") {
             if (i + 1 >= argc) {
@@ -235,8 +284,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     LocalFree(argv);
 
-    // Launch the black screen windows
-    WindowInitiator windowInitiator(backgroundColor, shouldExitOnKeyPress, monitorIndices);
+    // Launch the black screen windows    
+    WindowInitiator windowInitiator(backgroundColor, shouldExitOnKeyPress, monitorIndices, monitorPatterns);
     windowInitiator.createWindow();
 
     return 0;

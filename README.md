@@ -6,7 +6,7 @@
 [![Windows x64](https://img.shields.io/badge/Windows-x64-551a8b?logo=windows)](https://www.microsoft.com/)
 
 The Black Screen App is a simple yet effective tool designed to display a fully black screen on your Windows computer. Whether you're looking to save energy, eliminate distractions, or simply need a black backdrop, this app has you covered.
-Multi-monitor support added. Use -m <monitors> or -m 0 for all.
+Multi-monitor support added. Use -m <monitors> or -m 0 for all. Use -M "<MonitorName>" to set monitor by name
 
 ## Features
 

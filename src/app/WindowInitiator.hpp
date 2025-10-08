@@ -9,32 +9,34 @@
 #include <windows.h>
 #include <vector>
 #include <iostream>
+#include <debugapi.h>
+#include <winuser.h>
+#include <wingdi.h>
+#include <setupapi.h>
+#include <devguid.h>
+
+#include "MonitorDetection.hpp"
 
 
 
-
-
-struct MonitorData {
-    HMONITOR hMonitor;
-    RECT rect;
-    int index;
-};
-
-// Declare as extern — define in .cpp
-extern std::vector<MonitorData> g_monitorList;
+// Declare as extern ï¿½ define in .cpp
 extern std::vector<HWND> g_windowHandles;
 
-BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData);
 
 
 class WindowInitiator {
 public:
     static std::string m_color;
     static bool disableKeyExit;
-    std::vector<int> m_monitorIndices; // Now supports multiple monitors
+    std::vector<int> m_monitorIndices;      // For -m
+    std::vector<std::string> m_monitorPatterns; // For -M
+    
 
-    explicit WindowInitiator(std::string color, const bool& disableKeyExit, std::vector<int> monitorIndices = { -1 });
+    explicit WindowInitiator(std::string color, const bool& disableKeyExit,
+        std::vector<int> monitorIndices = { -1 },
+        std::vector<std::string> monitorPatterns = {});
     void createWindow();
 };
+
 
 #endif // WINDOWINITIATOR_HPP
